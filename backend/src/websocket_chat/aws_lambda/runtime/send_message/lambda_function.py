@@ -13,9 +13,12 @@ metrics = Metrics(service="websocket_chat", namespace="serverless_demo")
 tracer = Tracer(service="websocket_chat")
 logger = Logger(service="websocket_chat")
 
+user_pool_arn = environ["USER_POOL_ARN"]
+user_pool_id = user_pool_arn.split("/")[1]
 messages_table_name = environ["MESSAGES_TABLE_NAME"]
 
 db_client = resource("dynamodb")
+cognito_client = client("cognito-idp")
 
 
 @metrics.log_metrics(capture_cold_start_metric=True)
@@ -23,6 +26,16 @@ db_client = resource("dynamodb")
 @logger.inject_lambda_context
 def handler(event, context):
     table = db_client.Table(messages_table_name)
+    # Get the Cognito user prefered_username attribute from the sub id
+    user = cognito_client.admin_get_user(
+        UserPoolId=user_pool_id, Username=event["identity"]["claims"]["sub"]
+    )
+    preferred_username = None
+    for attribute in user["UserAttributes"]:
+        if attribute["Name"] == "preferred_username":
+            preferred_username = attribute["Value"]
+            break
+    # Save the message to the database
     message_id = str(uuid4())
     creation_date = datetime.now(timezone.utc).isoformat(timespec="seconds")
     message = {
@@ -30,7 +43,7 @@ def handler(event, context):
         "SK": creation_date,
         "Text": event["arguments"]["message"]["text"],
         "AiGenerated": False,
-        "Username": "TestUser",
+        "Username": preferred_username,
         "TenantId": event["identity"]["claims"]["sub"],
     }
     response = table.put_item(Item=message)
@@ -38,5 +51,5 @@ def handler(event, context):
         "text": event["arguments"]["message"]["text"],
         "aiGenerated": False,
         "tenantId": event["identity"]["claims"]["sub"],
-        "username": "TestUser",
+        "username": preferred_username,
     }

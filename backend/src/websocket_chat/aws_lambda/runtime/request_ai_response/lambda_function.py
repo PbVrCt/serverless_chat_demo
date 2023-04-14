@@ -16,20 +16,31 @@ tracer = Tracer(service="websocket_chat")
 logger = Logger(service="websocket_chat")
 
 region_name = environ["AWS_REGION"]
+user_pool_arn = environ["USER_POOL_ARN"]
+user_pool_id = user_pool_arn.split("/")[1]
 messages_table_name = environ["MESSAGES_TABLE_NAME"]
 openai_token_secret_name = environ[
     "OPENAI_TOKEN_SECRET_NAME"
 ]  # Same as the key for the key-value pair in Secrets Manager
 
 db_client = resource("dynamodb")
+cognito_client = client("cognito-idp")
 
 
 @metrics.log_metrics(capture_cold_start_metric=True)
 @tracer.capture_lambda_handler
 @logger.inject_lambda_context
 def handler(event, context):
-    logger.info(event)
     table = db_client.Table(messages_table_name)
+    # Get the Cognito user prefered_username attribute from the sub id
+    user = cognito_client.admin_get_user(
+        UserPoolId=user_pool_id, Username=event["identity"]["claims"]["sub"]
+    )
+    preferred_username = None
+    for attribute in user["UserAttributes"]:
+        if attribute["Name"] == "preferred_username":
+            preferred_username = attribute["Value"]
+            break
     # Get the OpenAI token from Secrets Manager
     session_ = session.Session()
     client = session_.client(service_name="secretsmanager", region_name=region_name)
@@ -49,8 +60,8 @@ def handler(event, context):
     chat_inputs = [
         {
             "role": "system",
-            "content": "You are a greek phylosopher making arguments if favour of topics. You are currently arguing in favor of: {}".format(
-                "Plato"
+            "content": "You are the greek orator {} and will argument in favor of whatever the user prompts you to, in the style of {}".format(
+                preferred_username, preferred_username
             ),
         },
         {"role": "user", "content": event["arguments"]["message"]["text"]},
@@ -78,7 +89,7 @@ def handler(event, context):
         "SK": creation_date,
         "Text": ai_response,
         "AiGenerated": True,
-        "Username": "TestUser",
+        "Username": preferred_username,
         "TenantId": event["identity"]["claims"]["sub"],
     }
     response = table.put_item(Item=message)
@@ -86,5 +97,5 @@ def handler(event, context):
         "text": ai_response,
         "aiGenerated": True,
         "tenantId": event["identity"]["claims"]["sub"],
-        "username": "TestUser",
+        "username": preferred_username,
     }

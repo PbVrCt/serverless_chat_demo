@@ -77,6 +77,7 @@ class _MyHomePageState extends State<MyHomePage> {
       signUpForm: SignUpForm.custom(
         fields: [
           SignUpFormField.email(required: true),
+          SignUpFormField.preferredUsername(required: true),
           SignUpFormField.password(),
           SignUpFormField.passwordConfirmation(),
         ],

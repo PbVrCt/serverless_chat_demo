@@ -51,6 +51,9 @@ class UserPool(Construct):
             self_sign_up_enabled=True,
             auto_verify=cognito.AutoVerifiedAttrs(email=True, phone=False),
             standard_attributes=cognito.StandardAttributes(
+                preferred_username=cognito.StandardAttribute(
+                    required=True, mutable=True
+                ),
                 email=cognito.StandardAttribute(required=True, mutable=True),
             ),
             custom_attributes={
@@ -73,6 +76,7 @@ class UserPool(Construct):
         client_write_attributes = (
             (cognito.ClientAttributes()).with_standard_attributes(
                 email=True,
+                preferred_username=True,
             )
             # .with_custom_attributes("tier")
         )
@@ -80,6 +84,7 @@ class UserPool(Construct):
             (cognito.ClientAttributes()).with_standard_attributes(
                 email=True,
                 email_verified=True,
+                preferred_username=True,
             )
             # .with_custom_attributes("tier")
         )

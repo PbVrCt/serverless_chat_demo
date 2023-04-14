@@ -46,12 +46,19 @@ class LambdaFunctions(Construct):
             env_vars={"MESSAGES_TABLE_NAME": messages_table_name},
         ).add_policy(["dynamodb:Scan"], [messages_table_arn])
 
-        self._send_message = LambdaPython(
-            self,
-            "SendMessage",
-            code_path=current_path + "/runtime/send_message",
-            env_vars={"MESSAGES_TABLE_NAME": messages_table_name},
-        ).add_policy(["dynamodb:PutItem"], [messages_table_arn])
+        self._send_message = (
+            LambdaPython(
+                self,
+                "SendMessage",
+                code_path=current_path + "/runtime/send_message",
+                env_vars={
+                    "MESSAGES_TABLE_NAME": messages_table_name,
+                    "USER_POOL_ARN": user_pool_arn,
+                },
+            )
+            .add_policy(["dynamodb:PutItem"], [messages_table_arn])
+            .add_policy(["cognito-idp:AdminGetUser"], [user_pool_arn])
+        )
 
         self._request_ai_response = (
             LambdaPython(
@@ -62,11 +69,13 @@ class LambdaFunctions(Construct):
                 env_vars={
                     "MESSAGES_TABLE_NAME": messages_table_name,
                     "OPENAI_TOKEN_SECRET_NAME": openai_token_secret_name,
+                    "USER_POOL_ARN": user_pool_arn,
                 },
                 timeout=Duration.seconds(27),
             )
             .add_policy(["dynamodb:PutItem"], [messages_table_arn])
             .add_policy(["secretsmanager:GetSecretValue"], [openai_token_secret_arn])
+            .add_policy(["cognito-idp:AdminGetUser"], [user_pool_arn])
         )
 
         self._delete_all_messages = LambdaPython(
