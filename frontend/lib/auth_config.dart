@@ -17,9 +17,9 @@ Future<String> amplifyConfig() async {
       "api": {
           "plugins": {
               "awsAPIPlugin": {
-                  "{GraphQLEndpointName}": {
+                  "$graphQLEndpointName": {
                       "endpointType": "GraphQL",
-                      "endpoint": "{GraphQLUrl}",
+                      "endpoint": "$graphQLUrl",
                       "region": "eu-west-1",
                       "authorizationType": "AMAZON_COGNITO_USER_POOLS"
                   }
@@ -29,18 +29,27 @@ Future<String> amplifyConfig() async {
       "auth": {
           "plugins": {
               "awsCognitoAuthPlugin": {
+                  "UserAgent": "aws-amplify/cli",
+                  "Version": "0.1.0",
                   "IdentityManager": {
-                      "Default": {}
+                    "Default": {}
                   },
                   "CognitoUserPool": {
                       "Default": {
-                          "PoolId": "{CognitoPoolId}",
-                          "AppClientId": "{CognitoAppClientId}",
+                          "PoolId": "$userPoolId",
+                          "AppClientId": "$userPoolClientId",
                           "Region": "eu-west-1"
                       }
                   },
                   "Auth": {
                     "Default": {
+                        "OAuth": {
+                          "WebDomain": "example.com",
+                          "AppClientId": "$userPoolClientId",
+                          "SignInRedirectURI": "myapp://",
+                          "SignOutRedirectURI": "myapp://",
+                          "Scopes": ["phone", "email", "openid", "profile", "aws.cognito.signin.user.admin"]
+                        },
                         "authenticationFlowType": "USER_SRP_AUTH",
                         "loginMechanisms": [
                             "EMAIL"
@@ -68,11 +77,5 @@ Future<String> amplifyConfig() async {
           }
       }
   }''';
-  amplifyconfig = amplifyconfig.replaceAll('{GraphQLUrl}', graphQLUrl);
-  amplifyconfig =
-      amplifyconfig.replaceAll('{GraphQLEndpointName}', graphQLEndpointName);
-  amplifyconfig = amplifyconfig.replaceAll('{CognitoPoolId}', userPoolId);
-  amplifyconfig =
-      amplifyconfig.replaceAll('{CognitoAppClientId}', userPoolClientId);
   return amplifyconfig;
 }

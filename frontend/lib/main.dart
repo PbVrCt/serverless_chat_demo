@@ -55,8 +55,7 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   Future<void> _configureAmplify() async {
-    await Amplify.addPlugin(AmplifyAuthCognito());
-    await Amplify.addPlugin(AmplifyAPI());
+    Amplify.addPlugins([AmplifyAuthCognito(), AmplifyAPI()]);
     final amplifyconfig = await amplifyConfig();
     try {
       await Amplify.configure(amplifyconfig);
