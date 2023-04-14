@@ -1,0 +1,7 @@
+# this is an auto generated file. This will be overwritten
+query Messages {
+  messages {
+    topic
+    text
+  }
+}

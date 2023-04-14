@@ -1,0 +1,7 @@
+# this is an auto generated file. This will be overwritten
+mutation SendMessage($message: SendMessageInput!) {
+  sendMessage(message: $message) {
+    topic
+    text
+  }
+}

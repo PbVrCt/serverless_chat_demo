@@ -1,0 +1,36 @@
+{
+    "aws_prod_account_id": "xxxxxxxxxxxx",
+    "aws_deploy_region": "eu-west-1",
+    "app_name": "AppName",
+    "region": "eu-west-1",
+    "manager": {
+        "gitlab_runner_version": "14.5.1",
+        "desired_count": 1,
+        "cpu": "512",
+        "memory": "1024",
+        "gitlab_server_url": "https://gitlab.com",
+        "concurrent_jobs": 1,
+        "default_ssh_username": "root",
+        "gitlab_runner_token_secret_name": "GitlabSecretToken",
+        "log_group_name": "/Gitlab/Runner/",
+        "runner_log_output_limit": "4096",
+        "runner_tags": "fargate",
+        "VpcId": "vpc-e9519183"
+    },
+    "task_definition": {
+        "gitlab_runner_version": "14.5.1",
+        "cpu": "512",
+        "docker_image_name": "python",
+        "managed_policies": [
+            "AmazonEC2ContainerRegistryPowerUser"
+        ],
+        "memory": "1024",
+        "iam_policy_template": null,
+        "log_group_name": "/Gitlab/Runner/",
+        "stack_name": "CIRunnerJulia"
+    },
+    "tags": {
+        "ProjectName": "GitlabCIOnAWS"
+        // "CostCenter": "IT" # Note: This line is commented out, comments are not allowed in JSON
+    }
+}

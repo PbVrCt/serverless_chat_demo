@@ -1,0 +1,7 @@
+# this is an auto generated file. This will be overwritten
+subscription OnSendMessage($topic: ID) {
+  onSendMessage(topic: $topic) {
+    topic
+    text
+  }
+}

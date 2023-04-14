@@ -1,0 +1,11 @@
+{
+  "prod-UserPool": {
+    "UserPoolClientId": "",
+    "ExportsOutputFnGetAttUserPoolxxxxxxxxxxxxxxxxxxx": "",
+    "UserPoolId": ""
+  },
+  "prod-WebsocketChat": {
+    "GraphQLUrl": "",
+    "GraphQLEndpointName": ""
+  }
+}

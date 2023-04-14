@@ -1,0 +1,15 @@
+{
+  "NOTE/COMMENT": "The below values are the keys for the CfnOuputs that the cdk exports to a json file after deployment. Why did I place them here inside the shared folder? So that when the backend engineer is going to change them he preemptively becomes aware that the changes will interfere with the frontend engineer, who relies on the exported file to configure the Amplify authentication. Where is the exported file? Its path is set in 'backend/cdk.json' file after the 'outputsFile' key",
+  "prod_stage_name": "prod",
+  "dev_stage_name": "dev",
+  "websocket_chat_stack": {
+    "stack_name": "WebsocketChat",
+    "graphql_url_output_key": "GraphQLUrl",
+    "graphql_endpoint_name_output_key": "GraphQLEndpointName"
+  },
+  "user_pool_stack": {
+    "stack_name": "UserPool",
+    "pool_id_output_key": "UserPoolId",
+    "pool_client_id_output_key": "UserPoolClientId"
+  }
+}

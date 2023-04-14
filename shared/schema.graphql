@@ -1,0 +1,32 @@
+type Query {
+  messages: [Message]!
+}
+
+type Message {
+  text: String!
+  aiGenerated: Boolean!
+	tenantId: ID!
+	username: String!
+}
+
+input SendMessageInput {
+  text: String!
+}
+
+type Mutation {
+  sendMessage(message: SendMessageInput!): Message!
+  requestAiResponse(message: SendMessageInput!): Message!
+  deleteAllMessages: Boolean!
+}
+
+type Subscription {
+  onSendMessage(tenantId: ID!): Message @aws_subscribe(mutations: ["sendMessage"])
+  onRequestAiResponse: Message @aws_subscribe(mutations: ["requestAiResponse"])
+  onDeleteAllMessages: Boolean @aws_subscribe(mutations: ["deleteAllMessages"])
+}
+
+schema {
+  query: Query
+  mutation: Mutation
+  subscription: Subscription
+}
