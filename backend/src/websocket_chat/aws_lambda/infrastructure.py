@@ -73,7 +73,7 @@ class LambdaFunctions(Construct):
                 },
                 timeout=Duration.seconds(27),
             )
-            .add_policy(["dynamodb:PutItem"], [messages_table_arn])
+            .add_policy(["dynamodb:Scan", "dynamodb:PutItem"], [messages_table_arn])
             .add_policy(["secretsmanager:GetSecretValue"], [openai_token_secret_arn])
             .add_policy(["cognito-idp:AdminGetUser"], [user_pool_arn])
         )

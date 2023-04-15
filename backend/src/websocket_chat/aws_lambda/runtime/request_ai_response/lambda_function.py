@@ -55,28 +55,54 @@ def handler(event, context):
         raise e
     secret = loads(get_secret_value_response["SecretString"])
     secret = secret[openai_token_secret_name]
-    # Get a response from OpenAI
-    openai.api_key = secret
-    chat_inputs = [
+    # Prepare the AI inputs
+    ## Prompt
+    ai_prompt = [
         {
             "role": "system",
-            "content": "You are the greek orator {} and will argument in favor of whatever the user prompts you to, in the style of {}".format(
-                preferred_username, preferred_username
+            "content": """You are {}, the orator/statesman from the time of the greeks, and you are debating against other greek orator(s).
+            You will be provided the chat history of the debate between yourself and the others. With that, you will also receive one user message/prompt,
+            that you have to turn into a convincing argument in the style of {}, to be added to the conversation.
+            The argument must be expressed in one short sentence ending with a point.
+            The argument must be in favor of whatever the user has prompted you to support.""".format(
+                preferred_username, preferred_username, preferred_username
             ),
-        },
-        {"role": "user", "content": event["arguments"]["message"]["text"]},
+        }
     ]
+    ## Chat history
+    response = table.scan()
+    chat_history = []
+    logger.info(response)
+    for item in response["Items"]:
+        if (
+            item["AiGenerated"]
+            and item["TenantId"] == event["identity"]["claims"]["sub"]
+        ):
+            chat_history.append({"role": "assistant", "content": item["Text"]})
+        elif item["AiGenerated"]:
+            chat_history.append({"role": "user", "content": item["Text"]})
+    ## User message
+    user_message = [
+        {
+            "role": "user",
+            "content": "User prompt: " + event["arguments"]["message"]["text"],
+        }
+    ]
+    # Get a completion from OpenAI
+    chat_inputs = []
+    chat_inputs.extend(ai_prompt)
+    chat_inputs.extend(chat_history)
+    chat_inputs.extend(user_message)
+    openai.api_key = secret
     try:
         ai_response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
             messages=chat_inputs,
-            max_tokens=100,
+            max_tokens=25,
             n=1,
-            stop=None,
+            stop=[".", "?", "!", "\n"],
             temperature=0.5,
         )
-        logger.info(ai_response)
-        # metrics.add_metric(name="Put item worked", unit=MetricUnit.Count, value=1)
     except Exception as e:
         logger.exception("Error calling OpenAI: {}".format(str(e)))
         raise
