@@ -35,12 +35,4 @@ def handler(event, context):
                     "tenantId": item["TenantId"],
                 }
             )
-        graphql_response.append(
-            {
-                "text": item["Text"],
-                "aiGenerated": item["AiGenerated"],
-                "username": item["Username"],
-                "tenantId": item["TenantId"],
-            }
-        )
     return graphql_response
