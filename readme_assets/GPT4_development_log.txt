@@ -1,0 +1,2891 @@
+pablo@varelacastelo.com
+Given the following GraphQL schema:
+
+"""
+type Query {
+  messages: [Message!]! @aws_api_key @aws_iam
+}
+
+type Message @aws_api_key @aws_iam {
+  topic: ID
+  text: String!
+}
+
+input SendMessageInput {
+  topic: ID!
+  text: String!
+}
+
+type Mutation {
+  sendMessage(message: SendMessageInput!): Message @aws_iam
+}
+
+type Subscription {
+  onSendMessage(topic: ID): Message @aws_subscribe(mutations: ["sendMessage"])
+}
+
+schema {
+  query: Query
+  mutation: Mutation
+  subscription: Subscription
+}
+"""
+
+Fix the following flutter file to do a mutation that sends a message:
+
+import 'package:flutter/material.dart';
+import 'package:web_socket_channel/web_socket_channel.dart';
+
+import 'package:amplify_flutter/amplify_flutter.dart';
+import 'package:amplify_api/amplify_api.dart';
+import 'package:amplify_auth_cognito/amplify_auth_cognito.dart';
+import 'package:amplify_authenticator/amplify_authenticator.dart';
+import 'auth_config.dart';
+
+void main() => runApp(const MyApp());
+
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    const title = 'WebSocket Demo';
+    return const MaterialApp(
+      title: title,
+      home: MyHomePage(
+        title: title,
+      ),
+    );
+  }
+}
+
+class MyHomePage extends StatefulWidget {
+  const MyHomePage({
+    super.key,
+    required this.title,
+  });
+
+  final String title;
+
+  @override
+  State<MyHomePage> createState() => _MyHomePageState();
+}
+
+class _MyHomePageState extends State<MyHomePage> {
+  final TextEditingController _controller = TextEditingController();
+  final _channel =
+      WebSocketChannel.connect(Uri.parse('wss://echo.websocket.events'));
+  //     Uri.parse('wss://pbpoh451pb.execute-api.eu-west-1.amazonaws.com/Prod'));
+
+  @override
+  void initState() {
+    super.initState();
+    _configureAmplify();
+  }
+
+  Future<void> _configureAmplify() async {
+    await Amplify.addPlugin(AmplifyAuthCognito());
+    await Amplify.addPlugin(AmplifyAPI());
+    final amplifyconfig = await amplifyConfig();
+    try {
+      await Amplify.configure(amplifyconfig);
+      safePrint('Successfully configured Amplify');
+    } on Exception catch (e) {
+      safePrint('Error configuring Amplify: $e');
+    }
+    _sendMessage(text: "Test message");
+    _receiveOldMessages();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Authenticator(
+      child: MaterialApp(
+        builder: Authenticator.builder(),
+        home: Scaffold(
+          appBar: AppBar(
+            title: Text(widget.title),
+          ),
+          body: Padding(
+            padding: const EdgeInsets.all(20.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Form(
+                  child: TextFormField(
+                    controller: _controller,
+                    decoration:
+                        const InputDecoration(labelText: 'Send a message'),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                StreamBuilder(
+                  stream: _channel.stream,
+                  builder: (context, snapshot) {
+                    return Text(snapshot.hasData ? '${snapshot.data}' : '');
+                  },
+                )
+              ],
+            ),
+          ),
+          floatingActionButton: FloatingActionButton(
+            onPressed: _sendMessageOld,
+            tooltip: 'Send message',
+            child: const Icon(Icons.send),
+          ), // This trailing comma makes auto-formatting nicer for build methods.
+        ),
+      ),
+    );
+  }
+
+  void _sendMessageOld() {
+    if (_controller.text.isNotEmpty) {
+      _channel.sink.add(_controller.text);
+    }
+  }
+
+  Future<void> _sendMessage({required String text}) async {
+    String graphQLDocument = '''
+    mutation SendMessage(\$text: SendMessageInput!) {
+              sendMessage(input: {text: \$text}) {
+                topic
+                text
+              }
+        }
+    ''';
+    try {
+      final _response = await Amplify.API
+          .mutate(
+              request: GraphQLRequest<String>(
+                  document: graphQLDocument, variables: {'text': 'Hello'}))
+          .response;
+      print(_response.data);
+      print(_response.errors);
+    } on Exception catch (e) {
+      print(e);
+    }
+  }
+
+  Future<void> _receiveOldMessages() async {
+    String graphQLDocument = """
+    query GetMessages {
+      messages {
+        topic
+        text
+      }
+    }
+    """;
+    try {
+      final _response = await Amplify.API
+          .query(request: GraphQLRequest<String>(document: graphQLDocument))
+          .response;
+      print(_response.data);
+      // print(_response.errors);
+    } on Exception catch (e) {
+      print(e);
+    }
+  }
+
+  @override
+  void dispose() {
+    _channel.sink.close();
+    _controller.dispose();
+    super.dispose();
+  }
+}
+
+To fix the Flutter file, you need to change the _sendMessageOld function to _sendMessage to send messages using the GraphQL mutation. You also need to pass the text from the TextEditingController to the _sendMessage function.
+
+Here's the updated _MyHomePageState class with the required changes:
+
+dart
+
+class _MyHomePageState extends State<MyHomePage> {
+  final TextEditingController _controller = TextEditingController();
+  final _channel =
+      WebSocketChannel.connect(Uri.parse('wss://echo.websocket.events'));
+  //     Uri.parse('wss://pbpoh451pb.execute-api.eu-west-1.amazonaws.com/Prod'));
+
+  @override
+  void initState() {
+    super.initState();
+    _configureAmplify();
+  }
+
+  // ...rest of the code...
+
+  @override
+  Widget build(BuildContext context) {
+    return Authenticator(
+      child: MaterialApp(
+        builder: Authenticator.builder(),
+        home: Scaffold(
+          appBar: AppBar(
+            title: Text(widget.title),
+          ),
+          body: Padding(
+            padding: const EdgeInsets.all(20.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Form(
+                  child: TextFormField(
+                    controller: _controller,
+                    decoration:
+                        const InputDecoration(labelText: 'Send a message'),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                StreamBuilder(
+                  stream: _channel.stream,
+                  builder: (context, snapshot) {
+                    return Text(snapshot.hasData ? '${snapshot.data}' : '');
+                  },
+                )
+              ],
+            ),
+          ),
+          floatingActionButton: FloatingActionButton(
+            onPressed: () {
+              if (_controller.text.isNotEmpty) {
+                _sendMessage(text: _controller.text);
+              }
+            },
+            tooltip: 'Send message',
+            child: const Icon(Icons.send),
+          ), // This trailing comma makes auto-formatting nicer for build methods.
+        ),
+      ),
+    );
+  }
+
+  // ...rest of the code...
+
+  Future<void> _sendMessage({required String text}) async {
+    String graphQLDocument = '''
+    mutation SendMessage(\$message: SendMessageInput!) {
+              sendMessage(message: \$message) {
+                topic
+                text
+              }
+        }
+    ''';
+    try {
+      final _response = await Amplify.API
+          .mutate(
+              request: GraphQLRequest<String>(
+                  document: graphQLDocument, variables: {'message': {'topic': 'topic_id', 'text': text}}))
+          .response;
+      print(_response.data);
+      print(_response.errors);
+    } on Exception catch (e) {
+      print(e);
+    }
+  }
+
+  // ...rest of the code...
+}
+
+With these changes, the _sendMessage function will be called when the FloatingActionButton is pressed, and the text from the TextFormField will be passed to it. The GraphQL mutation will then be executed, sending the message through your API.
+pablo@varelacastelo.com
+Update the code to display messages using _receiveOldMessages()
+
+To display messages using _receiveOldMessages() function, you can update the StreamBuilder widget to a ListView.builder widget and make use of the data received from the _receiveOldMessages() function. To achieve this, you need to manage the state of the messages and update the state when new messages are fetched.
+
+Here's the updated _MyHomePageState class:
+
+dart
+
+class _MyHomePageState extends State<MyHomePage> {
+  final TextEditingController _controller = TextEditingController();
+  final _channel =
+      WebSocketChannel.connect(Uri.parse('wss://echo.websocket.events'));
+
+  List<dynamic> _messages = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _configureAmplify();
+  }
+
+  // ...rest of the code...
+
+  @override
+  Widget build(BuildContext context) {
+    return Authenticator(
+      child: MaterialApp(
+        builder: Authenticator.builder(),
+        home: Scaffold(
+          appBar: AppBar(
+            title: Text(widget.title),
+          ),
+          body: Padding(
+            padding: const EdgeInsets.all(20.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Form(
+                  child: TextFormField(
+                    controller: _controller,
+                    decoration:
+                        const InputDecoration(labelText: 'Send a message'),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Expanded(
+                  child: ListView.builder(
+                    itemCount: _messages.length,
+                    itemBuilder: (context, index) {
+                      final message = _messages[index];
+                      return ListTile(
+                        title: Text(message['text']),
+                        subtitle: Text(message['topic']),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+          floatingActionButton: FloatingActionButton(
+            onPressed: () {
+              if (_controller.text.isNotEmpty) {
+                _sendMessage(text: _controller.text);
+              }
+            },
+            tooltip: 'Send message',
+            child: const Icon(Icons.send),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ...rest of the code...
+
+  Future<void> _receiveOldMessages() async {
+    String graphQLDocument = """
+    query GetMessages {
+      messages {
+        topic
+        text
+      }
+    }
+    """;
+    try {
+      final _response = await Amplify.API
+          .query(request: GraphQLRequest<String>(document: graphQLDocument))
+          .response;
+      print(_response.data);
+      setState(() {
+        _messages = jsonDecode(_response.data)['messages'];
+      });
+    } on Exception catch (e) {
+      print(e);
+    }
+  }
+
+  // ...rest of the code...
+}
+
+In the code above:
+
+    We removed the StreamBuilder widget and replaced it with a ListView.builder widget.
+    The _messages variable was added to store messages.
+    The ListView.builder widget was wrapped with an Expanded widget to make it take up the remaining space in the column.
+    Inside the _receiveOldMessages function, we parse the JSON response data and update the _messages state using setState().
+
+Now, the messages will be displayed in a list using the data received from the _receiveOldMessages() function.
+pablo@varelacastelo.com
+I have updated the code based on your suggestions, and renamed _receiveOldMessages to _receive Messages. The problem that I have now is that the _sendMessage() function sends the message "Hello" independently of what is typed in the form. Please fix it:
+
+import 'package:flutter/material.dart';
+import 'package:web_socket_channel/web_socket_channel.dart';
+import 'dart:convert';
+
+import 'package:amplify_flutter/amplify_flutter.dart';
+import 'package:amplify_api/amplify_api.dart';
+import 'package:amplify_auth_cognito/amplify_auth_cognito.dart';
+import 'package:amplify_authenticator/amplify_authenticator.dart';
+import 'auth_config.dart';
+
+void main() => runApp(const MyApp());
+
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    const title = 'WebSocket Demo';
+    return const MaterialApp(
+      title: title,
+      home: MyHomePage(
+        title: title,
+      ),
+    );
+  }
+}
+
+class MyHomePage extends StatefulWidget {
+  const MyHomePage({
+    super.key,
+    required this.title,
+  });
+
+  final String title;
+
+  @override
+  State<MyHomePage> createState() => _MyHomePageState();
+}
+
+class _MyHomePageState extends State<MyHomePage> {
+  final TextEditingController _controller = TextEditingController();
+  List<dynamic> _messages = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _configureAmplify();
+  }
+
+  Future<void> _configureAmplify() async {
+    await Amplify.addPlugin(AmplifyAuthCognito());
+    await Amplify.addPlugin(AmplifyAPI());
+    final amplifyconfig = await amplifyConfig();
+    try {
+      await Amplify.configure(amplifyconfig);
+      safePrint('Successfully configured Amplify');
+    } on Exception catch (e) {
+      safePrint('Error configuring Amplify: $e');
+    }
+    _receiveMessages();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Authenticator(
+      child: MaterialApp(
+        builder: Authenticator.builder(),
+        home: Scaffold(
+          appBar: AppBar(
+            title: Text(widget.title),
+          ),
+          body: Padding(
+            padding: const EdgeInsets.all(20.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Form(
+                  child: TextFormField(
+                    controller: _controller,
+                    decoration:
+                        const InputDecoration(labelText: 'Send a message'),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Expanded(
+                  child: ListView.builder(
+                    itemCount: _messages.length,
+                    itemBuilder: (context, index) {
+                      final message = _messages[index];
+                      return ListTile(
+                        title: Text(message['text']),
+                        subtitle: Text(message['topic']),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+          floatingActionButton: FloatingActionButton(
+            onPressed: () {
+              if (_controller.text.isNotEmpty) {
+                _sendMessage(text: _controller.text);
+              }
+              _receiveMessages();
+            },
+            tooltip: 'Send message',
+            child: const Icon(Icons.send),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _sendMessage({required String text}) async {
+    String graphQLDocument = '''
+    mutation SendMessage(\$message: SendMessageInput!) {
+              sendMessage(message: \$message) {
+                topic
+                text
+              }
+        }
+    ''';
+    try {
+      final _response = await Amplify.API
+          .mutate(
+              request:
+                  GraphQLRequest<String>(document: graphQLDocument, variables: {
+            'message': {'text': 'Hello', 'topic': 'uuid101'}
+          }))
+          .response;
+      print("Send message response: ");
+      print(_response.data);
+      print("Send message error: ");
+      print(_response.errors);
+    } on Exception catch (e) {
+      print(e);
+    }
+  }
+
+  Future<void> _receiveMessages() async {
+    String graphQLDocument = """
+    query GetMessages {
+      messages {
+        topic
+        text
+      }
+    }
+    """;
+    try {
+      final _response = await Amplify.API
+          .query(request: GraphQLRequest<String>(document: graphQLDocument))
+          .response;
+      print("Query messages response: ");
+      print(_response.data);
+      print("Query messages error: ");
+      print(_response.errors);
+      setState(() {
+        _messages = json.decode(_response.data!)['messages'];
+      });
+    } on Exception catch (e) {
+      print(e);
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+}
+
+The problem is in the _sendMessage() function, where the variables parameter of the GraphQLRequest is hard-coded to send the message "Hello" instead of using the text parameter passed to the function. To fix this, simply replace the hard-coded value with the text parameter.
+
+Here's the updated _sendMessage() function:
+
+dart
+
+Future<void> _sendMessage({required String text}) async {
+  String graphQLDocument = '''
+  mutation SendMessage(\$message: SendMessageInput!) {
+            sendMessage(message: \$message) {
+              topic
+              text
+            }
+      }
+  ''';
+  try {
+    final _response = await Amplify.API
+        .mutate(
+            request:
+                GraphQLRequest<String>(document: graphQLDocument, variables: {
+      'message': {'text': text, 'topic': 'uuid101'}
+    }))
+        .response;
+    print("Send message response: ");
+    print(_response.data);
+    print("Send message error: ");
+    print(_response.errors);
+  } on Exception catch (e) {
+    print(e);
+  }
+}
+
+Now the _sendMessage() function will send the text that is passed to it, which will be the text entered in the TextFormField.
+pablo@varelacastelo.com
+Another problem is that the _receiveMessage() call within the onPressed() function does not retrieve the last sent message, because it is called right after the _sendMessage() function. Please fix it so that after sending the message the list is updated with all the messages
+
+To ensure that the _receiveMessages() function is called after the message is sent, you can make the _sendMessage() function return a Future. Then, you can use the async and await keywords to wait for the _sendMessage() function to complete before calling the _receiveMessages() function.
+
+Here's the updated code:
+
+dart
+
+// Add async keyword to the onPressed function
+floatingActionButton: FloatingActionButton(
+  onPressed: () async {
+    if (_controller.text.isNotEmpty) {
+      await _sendMessage(text: _controller.text);
+    }
+    _receiveMessages();
+  },
+  tooltip: 'Send message',
+  child: const Icon(Icons.send),
+),
+
+// Add async keyword to the _sendMessage function
+Future<void> _sendMessage({required String text}) async {
+  String graphQLDocument = '''
+  mutation SendMessage(\$message: SendMessageInput!) {
+            sendMessage(message: \$message) {
+              topic
+              text
+            }
+      }
+  ''';
+  try {
+    final _response = await Amplify.API
+        .mutate(
+            request:
+                GraphQLRequest<String>(document: graphQLDocument, variables: {
+      'message': {'text': text, 'topic': 'uuid101'}
+    }))
+        .response;
+    print("Send message response: ");
+    print(_response.data);
+    print("Send message error: ");
+    print(_response.errors);
+  } on Exception catch (e) {
+    print(e);
+  }
+}
+
+Now, the _receiveMessages() function will be called only after the _sendMessage() function has completed, ensuring that the latest messages are fetched after sending a new message.
+pablo@varelacastelo.com
+Now update the code so that the user is subscripted to new messages using the GraphQL Subscription call, so that when another user posts a message he will receieve it
+
+To achieve this, you can create a subscription using the Amplify Flutter package and listen for new messages. Once a new message is received, update the _messages list and call setState() to refresh the UI.
+
+Here's the updated code with the subscription implementation:
+
+dart
+
+class _MyHomePageState extends State<MyHomePage> {
+  final TextEditingController _controller = TextEditingController();
+  List<dynamic> _messages = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _configureAmplify();
+  }
+
+  // New function to create the subscription
+  Future<void> _subscribeToNewMessages() async {
+    String graphQLDocument = '''
+      subscription OnSendMessage(\$topic: ID) {
+        onSendMessage(topic: \$topic) {
+          topic
+          text
+        }
+      }
+    ''';
+
+    try {
+      final subscription = await Amplify.API.subscribe(
+          request: GraphQLRequest<String>(
+              document: graphQLDocument, variables: {'topic': 'uuid101'}));
+
+      subscription.stream.listen((event) {
+        print('New message received:');
+        print(event.data);
+        setState(() {
+          _messages.add(json.decode(event.data!)['onSendMessage']);
+        });
+      });
+    } on Exception catch (e) {
+      print(e);
+    }
+  }
+
+  Future<void> _configureAmplify() async {
+    await Amplify.addPlugin(AmplifyAuthCognito());
+    await Amplify.addPlugin(AmplifyAPI());
+    final amplifyconfig = await amplifyConfig();
+    try {
+      await Amplify.configure(amplifyconfig);
+      safePrint('Successfully configured Amplify');
+    } on Exception catch (e) {
+      safePrint('Error configuring Amplify: $e');
+    }
+    _receiveMessages();
+    _subscribeToNewMessages(); // Call the new function after configuring Amplify
+  }
+
+  // ... rest of the code remains unchanged
+}
+
+Now, when another user sends a message, your app will receive the new message and update the UI accordingly.
+pablo@varelacastelo.com
+The _subscribeToNewMessages() function is not correct. Use the 2 following examples to update the function:
+
+Example 1:
+
+try {
+    String graphQLDocument = '''subscription OnCreateTodo {
+        onCreateTodo {
+          id
+          name
+          description
+        }
+      }''';
+
+    var operation = Amplify.API.subscribe(
+        request: GraphQLRequest<String>(document: graphQLDocument),
+        onData: (event) {
+          print('Subscription event data received: ${event.data}');
+        },
+        onEstablished: () {
+          print('Subscription established');
+        },
+        onError: (e) {
+          print('Subscription failed with error: $e');
+        },
+        onDone: () {
+          print('Subscription has been closed successfully');
+        });
+} on ApiException catch (e) {
+    print('Failed to establish subscription: $e');
+}
+
+Example 2:
+
+try {
+    String graphQLDocument = '''subscription OnCreateTodo {
+        onCreateTodo {
+          id
+          name
+          description
+        }
+      }''';
+
+    var operation = Amplify.API.subscribe(
+        request: GraphQLRequest<String>(document: graphQLDocument),
+        onData: (event) {
+          print('Subscription event data received: ${event.data}');
+        },
+        onEstablished: () {
+          print('Subscription established');
+        },
+        onError: (e) {
+          print('Subscription failed with error: $e');
+        },
+        onDone: () {
+          print('Subscription has been closed successfully');
+        });
+} on ApiException catch (e) {
+    print('Failed to establish subscription: $e');
+}
+
+// Cancel the subscription when you're finished with it
+operation.cancel();
+
+I apologize for the confusion. Here's the updated _subscribeToNewMessages() function using the provided examples:
+
+dart
+
+Future<void> _subscribeToNewMessages() async {
+  try {
+    String graphQLDocument = '''
+      subscription OnSendMessage(\$topic: ID) {
+        onSendMessage(topic: \$topic) {
+          topic
+          text
+        }
+      }
+    ''';
+
+    var operation = Amplify.API.subscribe(
+      request: GraphQLRequest<String>(
+        document: graphQLDocument,
+        variables: {'topic': 'uuid101'},
+      ),
+      onData: (event) {
+        print('Subscription event data received: ${event.data}');
+        setState(() {
+          _messages.add(json.decode(event.data!)['onSendMessage']);
+        });
+      },
+      onEstablished: () {
+        print('Subscription established');
+      },
+      onError: (e) {
+        print('Subscription failed with error: $e');
+      },
+      onDone: () {
+        print('Subscription has been closed successfully');
+      },
+    );
+  } on ApiException catch (e) {
+    print('Failed to establish subscription: $e');
+  }
+}
+
+This code creates a subscription that listens for new messages with the specified topic. When a new message is received, it updates the _messages list and refreshes the UI using setState().
+
+Don't forget to cancel the subscription when you no longer need it. To do this, you can store the operation in the class and then call operation.cancel() in the dispose() method:
+
+dart
+
+class _MyHomePageState extends State<MyHomePage> {
+  // ...
+  SubscriptionOperation<String>? _subscriptionOperation;
+
+  // ...
+
+  Future<void> _subscribeToNewMessages() async {
+    // ...
+    _subscriptionOperation = Amplify.API.subscribe(
+      // ...
+    );
+    // ...
+  }
+
+  @override
+  void dispose() {
+    _subscriptionOperation?.cancel();
+    _controller.dispose();
+    super.dispose();
+  }
+}
+
+Now, the _subscribeToNewMessages() function should work as expected.
+pablo@varelacastelo.com
+_subscriptionOperation scope is local to _subscribeToNewMessages, so it cannot be accesed by dispose(). Please fix it.
+
+Additionally, apparently the 2 examples that I provided were wrong because request, onData, onError and onDone are not defined. onEstablished it however. Please fix it.
+
+I apologize for the confusion. Let me correct the issues with the _subscribeToNewMessages() function and the class scope for _subscriptionOperation.
+
+First, let's modify the class definition to include the _subscriptionOperation as an instance variable:
+
+dart
+
+class _MyHomePageState extends State<MyHomePage> {
+  // ...
+  SubscriptionOperation<String>? _subscriptionOperation;
+
+  // ...
+}
+
+Now, let's update the _subscribeToNewMessages() function to correctly define the request, onData, onError, and onDone parameters:
+
+dart
+
+Future<void> _subscribeToNewMessages() async {
+  try {
+    String graphQLDocument = '''
+      subscription OnSendMessage(\$topic: ID) {
+        onSendMessage(topic: \$topic) {
+          topic
+          text
+        }
+      }
+    ''';
+
+    _subscriptionOperation = Amplify.API.subscribe(
+      request: GraphQLRequest<String>(
+        document: graphQLDocument,
+        variables: {'topic': 'uuid101'},
+      ),
+      onData: (event) {
+        print('Subscription event data received: ${event.data}');
+        setState(() {
+          _messages.add(json.decode(event.data!)['onSendMessage']);
+        });
+      },
+      onEstablished: () {
+        print('Subscription established');
+      },
+      onError: (e) {
+        print('Subscription failed with error: $e');
+      },
+      onDone: () {
+        print('Subscription has been closed successfully');
+      },
+    );
+  } on ApiException catch (e) {
+    print('Failed to establish subscription: $e');
+  }
+}
+
+Finally, update the dispose() method to cancel the subscription operation:
+
+dart
+
+@Override
+void dispose() {
+  _subscriptionOperation?.cancel();
+  _controller.dispose();
+  super.dispose();
+}
+
+With these changes, the _subscribeToNewMessages() function should work correctly, and the _subscriptionOperation will be accessible in the dispose() method to cancel the subscription when needed.
+pablo@varelacastelo.com
+Here are the docs on how to do a Subscription with Amplify. Please update the code based on this docs:
+
+https://docs.amplify.aws/lib/graphqlapi/subscribe-data/q/platform/flutter/
+
+I apologize for the previous mistake. Based on the Amplify documentation, I have updated the _subscribeToNewMessages() function and related code.
+
+First, modify the class definition to include the _streamController as an instance variable:
+
+dart
+
+class _MyHomePageState extends State<MyHomePage> {
+  // ...
+  StreamController<List<dynamic>> _streamController = StreamController<List<dynamic>>.broadcast();
+
+  // ...
+}
+
+Update the _subscribeToNewMessages() function:
+
+dart
+
+Future<void> _subscribeToNewMessages() async {
+  String graphQLDocument = '''
+    subscription OnSendMessage(\$topic: ID) {
+      onSendMessage(topic: \$topic) {
+        topic
+        text
+      }
+    }
+  ''';
+
+  try {
+    var operation = Amplify.API.subscribe(
+      request: GraphQLRequest<String>(
+        document: graphQLDocument,
+        variables: {'topic': 'uuid101'},
+      ),
+      onData: (event) {
+        print('Subscription event data received: ${event.data}');
+        setState(() {
+          _messages.add(json.decode(event.data!)['onSendMessage']);
+          _streamController.add(_messages);
+        });
+      },
+      onEstablished: () {
+        print('Subscription established');
+      },
+      onError: (e) {
+        print('Subscription failed with error: $e');
+      },
+      onDone: () {
+        print('Subscription has been closed successfully');
+      },
+    );
+  } on ApiException catch (e) {
+    print('Failed to establish subscription: $e');
+  }
+}
+
+Now, update the ListView to use StreamBuilder:
+
+dart
+
+Expanded(
+  child: StreamBuilder<List<dynamic>>(
+    stream: _streamController.stream,
+    initialData: _messages,
+    builder: (context, snapshot) {
+      if (snapshot.hasData) {
+        return ListView.builder(
+          itemCount: snapshot.data!.length,
+          itemBuilder: (context, index) {
+            final message = snapshot.data![index];
+            return ListTile(
+              title: Text(message['text']),
+              subtitle: Text(message['topic']),
+            );
+          },
+        );
+      } else {
+        return Center(child: CircularProgressIndicator());
+      }
+    },
+  ),
+),
+
+Finally, update the dispose() method to close the stream controller:
+
+dart
+
+@Override
+void dispose() {
+  _streamController.close();
+  _controller.dispose();
+  super.dispose();
+}
+
+With these changes, the _subscribeToNewMessages() function should work correctly according to the Amplify documentation. The updated code should now display new messages in real-time as they are received through the GraphQL subscription.
+pablo@varelacastelo.com
+I have updated the code based on your suggestions and the docs. Now the subscription is established, but it is not receiving new messages when they are sent. Please fix it:
+
+import 'package:flutter/material.dart';
+import 'dart:convert';
+import 'dart:async';
+
+import 'package:amplify_flutter/amplify_flutter.dart';
+import 'package:amplify_api/amplify_api.dart';
+import 'package:amplify_auth_cognito/amplify_auth_cognito.dart';
+import 'package:amplify_authenticator/amplify_authenticator.dart';
+import 'auth_config.dart';
+
+void main() => runApp(const MyApp());
+
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    const title = 'WebSocket Demo';
+    return const MaterialApp(
+      title: title,
+      home: MyHomePage(
+        title: title,
+      ),
+    );
+  }
+}
+
+class MyHomePage extends StatefulWidget {
+  const MyHomePage({
+    super.key,
+    required this.title,
+  });
+
+  final String title;
+
+  @override
+  State<MyHomePage> createState() => _MyHomePageState();
+}
+
+class _MyHomePageState extends State<MyHomePage> {
+  final TextEditingController _controller = TextEditingController();
+  List<dynamic> _messages = [];
+  StreamController<List<dynamic>> _streamController =
+      StreamController<List<dynamic>>.broadcast();
+  StreamSubscription<GraphQLResponse<dynamic>>? subscription;
+
+  @override
+  void initState() {
+    super.initState();
+    _configureAmplify();
+  }
+
+  Future<void> _configureAmplify() async {
+    await Amplify.addPlugin(AmplifyAuthCognito());
+    await Amplify.addPlugin(AmplifyAPI());
+    final amplifyconfig = await amplifyConfig();
+    try {
+      await Amplify.configure(amplifyconfig);
+      safePrint('Successfully configured Amplify');
+    } on Exception catch (e) {
+      safePrint('Error configuring Amplify: $e');
+    }
+    _receiveMessages();
+    _subscribeToNewMessages();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Authenticator(
+      child: MaterialApp(
+        builder: Authenticator.builder(),
+        home: Scaffold(
+          appBar: AppBar(
+            title: Text(widget.title),
+          ),
+          body: Padding(
+            padding: const EdgeInsets.all(20.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Form(
+                  child: TextFormField(
+                    controller: _controller,
+                    decoration:
+                        const InputDecoration(labelText: 'Send a message'),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Expanded(
+                  child: StreamBuilder<List<dynamic>>(
+                    stream: _streamController.stream,
+                    initialData: _messages,
+                    builder: (context, snapshot) {
+                      if (snapshot.hasData) {
+                        return ListView.builder(
+                          itemCount: snapshot.data!.length,
+                          itemBuilder: (context, index) {
+                            final message = snapshot.data![index];
+                            return ListTile(
+                              title: Text(message['text']),
+                              subtitle: Text(message['topic']),
+                            );
+                          },
+                        );
+                      } else {
+                        return Center(child: CircularProgressIndicator());
+                      }
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+          floatingActionButton: FloatingActionButton(
+            onPressed: () async {
+              if (_controller.text.isNotEmpty) {
+                await _sendMessage(text: _controller.text);
+              }
+              _receiveMessages();
+            },
+            tooltip: 'Send message',
+            child: const Icon(Icons.send),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _receiveMessages() async {
+    String graphQLDocument = """
+    query GetMessages {
+      messages {
+        topic
+        text
+      }
+    }
+    """;
+    try {
+      final _response = await Amplify.API
+          .query(request: GraphQLRequest<String>(document: graphQLDocument))
+          .response;
+      print("Query messages response: ");
+      print(_response.data);
+      print("Query messages error: ");
+      print(_response.errors);
+      setState(() {
+        _messages = json.decode(_response.data!)['messages'];
+      });
+    } on Exception catch (e) {
+      print(e);
+    }
+  }
+
+  Future<void> _subscribeToNewMessages() async {
+    String graphQLDocument = '''
+    subscription OnSendMessage(\$topic: ID) {
+      onSendMessage(topic: \$topic) {
+        topic
+        text
+      }
+    }
+  ''';
+
+    try {
+      final Stream<GraphQLResponse<dynamic>> operation = Amplify.API.subscribe(
+          GraphQLRequest<String>(
+            document: graphQLDocument,
+            variables: {'topic': 'uuid101'},
+          ), onEstablished: () {
+        print('Subscription established');
+      });
+      subscription = operation.listen(
+        (event) {
+          print('Subscription event data received: ${event.data}');
+          setState(() {
+            _messages.add(json.decode(event.data!)['onSendMessage']);
+            _streamController.add(_messages);
+          });
+        },
+        onError: (Object e) => print('Error in subscription stream: $e'),
+      );
+    } on ApiException catch (e) {
+      print('Failed to establish subscription: $e');
+    }
+  }
+
+  Future<void> _sendMessage({required String text}) async {
+    String graphQLDocument = '''
+    mutation SendMessage(\$message: SendMessageInput!) {
+              sendMessage(message: \$message) {
+                topic
+                text
+              }
+        }
+    ''';
+    try {
+      final _response = await Amplify.API
+          .mutate(
+              request:
+                  GraphQLRequest<String>(document: graphQLDocument, variables: {
+            'message': {'text': text, 'topic': 'uuid101'}
+          }))
+          .response;
+      print("Send message response: ");
+      print(_response.data);
+      print("Send message error: ");
+      print(_response.errors);
+    } on Exception catch (e) {
+      print(e);
+    }
+  }
+
+  @override
+  void dispose() {
+    subscription?.cancel();
+    _streamController.close();
+    _controller.dispose();
+    super.dispose();
+  }
+}
+
+Apologies for the confusion earlier. The issue is likely related to the way the subscription is set up. Specifically, the subscription is being filtered by a topic using a static variable 'uuid101'. If the new messages have different topics, they won't be received by this subscription.
+
+To fix the issue, you can either:
+
+    Make sure that all messages have the same topic, 'uuid101', so they can be received by the subscription.
+    Remove the topic filter from the subscription so that it can receive all messages regardless of their topic.
+
+To implement option 2, modify the subscription document in the _subscribeToNewMessages() function as follows:
+
+dart
+
+String graphQLDocument = '''
+  subscription OnSendMessage {
+    onSendMessage {
+      topic
+      text
+    }
+  }
+''';
+
+And update the request in the Amplify.API.subscribe call to remove the variables:
+
+dart
+
+final Stream<GraphQLResponse<dynamic>> operation = Amplify.API.subscribe(
+  GraphQLRequest<String>(
+    document: graphQLDocument,
+  ),
+  onEstablished: () {
+    print('Subscription established');
+  },
+);
+
+After making these changes, the subscription should receive all new messages as they are sent, regardless of their topic.
+pablo@varelacastelo.com
+The following code now works. Please update it so that after a message is received the list view scrolls to the bottom:
+
+import 'package:flutter/material.dart';
+import 'dart:convert';
+import 'dart:async';
+
+import 'package:amplify_flutter/amplify_flutter.dart';
+import 'package:amplify_api/amplify_api.dart';
+import 'package:amplify_auth_cognito/amplify_auth_cognito.dart';
+import 'package:amplify_authenticator/amplify_authenticator.dart';
+import 'auth_config.dart';
+
+void main() => runApp(const MyApp());
+
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    const title = 'WebSocket Demo';
+    return const MaterialApp(
+      title: title,
+      home: MyHomePage(
+        title: title,
+      ),
+    );
+  }
+}
+
+class MyHomePage extends StatefulWidget {
+  const MyHomePage({
+    super.key,
+    required this.title,
+  });
+
+  final String title;
+
+  @override
+  State<MyHomePage> createState() => _MyHomePageState();
+}
+
+class _MyHomePageState extends State<MyHomePage> {
+  final TextEditingController _controller = TextEditingController();
+  List<dynamic> _messages = [];
+  final StreamController<List<dynamic>> _streamController =
+      StreamController<List<dynamic>>.broadcast();
+  StreamSubscription<GraphQLResponse<dynamic>>? subscription;
+
+  @override
+  void initState() {
+    super.initState();
+    _configureAmplify();
+  }
+
+  Future<void> _configureAmplify() async {
+    await Amplify.addPlugin(AmplifyAuthCognito());
+    await Amplify.addPlugin(AmplifyAPI());
+    final amplifyconfig = await amplifyConfig();
+    try {
+      await Amplify.configure(amplifyconfig);
+      safePrint('Successfully configured Amplify');
+    } on Exception catch (e) {
+      safePrint('Error configuring Amplify: $e');
+    }
+    _receiveMessages();
+    _subscribeToNewMessages();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Authenticator(
+      child: MaterialApp(
+        builder: Authenticator.builder(),
+        home: Scaffold(
+          appBar: AppBar(
+            title: Text(widget.title),
+          ),
+          body: Padding(
+            padding: const EdgeInsets.all(20.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Form(
+                  child: TextFormField(
+                    controller: _controller,
+                    decoration:
+                        const InputDecoration(labelText: 'Send a message'),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Expanded(
+                  child: StreamBuilder<List<dynamic>>(
+                    stream: _streamController.stream,
+                    initialData: _messages,
+                    builder: (context, snapshot) {
+                      if (snapshot.hasData) {
+                        return ListView.builder(
+                          itemCount: snapshot.data!.length,
+                          itemBuilder: (context, index) {
+                            final message = snapshot.data![index];
+                            return ListTile(
+                              title: Text(message['text']),
+                              subtitle: Text(message['topic']),
+                            );
+                          },
+                        );
+                      } else {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+          floatingActionButton: FloatingActionButton(
+            onPressed: () async {
+              if (_controller.text.isNotEmpty) {
+                await _sendMessage(text: _controller.text);
+              }
+            },
+            tooltip: 'Send message',
+            child: const Icon(Icons.send),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _receiveMessages() async {
+    String graphQLDocument = """
+    query GetMessages {
+      messages {
+        topic
+        text
+      }
+    }
+    """;
+    try {
+      final response = await Amplify.API
+          .query(request: GraphQLRequest<String>(document: graphQLDocument))
+          .response;
+      print('Query messages data received: ${response.data}');
+      // print('Query messages error received: ${_response.errors}');
+      setState(() {
+        _messages = json.decode(response.data!)['messages'];
+        _streamController.add(_messages);
+      });
+    } on Exception catch (e) {
+      print(e);
+    }
+  }
+
+  // subscription OnSendMessage(\$topic: ID) {
+  //   onSendMessage(topic: \$topic) {
+  Future<void> _subscribeToNewMessages() async {
+    String graphQLDocument = '''
+    subscription OnSendMessage {
+      onSendMessage {
+        topic
+        text
+      }
+    }
+  ''';
+
+    try {
+      final Stream<GraphQLResponse<dynamic>> operation = Amplify.API.subscribe(
+          GraphQLRequest<String>(
+            document: graphQLDocument,
+            // variables: {'topic': 'uuid101'},
+          ), onEstablished: () {
+        safePrint('Subscription established');
+      });
+      subscription = operation.listen(
+        (event) {
+          safePrint('Subscription event data received: ${event.data}');
+          setState(() {
+            _messages.add(json.decode(event.data!)['onSendMessage']);
+            _streamController.add(_messages);
+          });
+        },
+        onError: (Object e) => safePrint('Error in subscription stream: $e'),
+      );
+    } on ApiException catch (e) {
+      print('Failed to establish subscription: $e');
+    }
+  }
+
+  Future<void> _sendMessage({required String text}) async {
+    String graphQLDocument = '''
+    mutation SendMessage(\$message: SendMessageInput!) {
+              sendMessage(message: \$message) {
+                topic
+                text
+              }
+        }
+    ''';
+    try {
+      final response = await Amplify.API
+          .mutate(
+              request:
+                  GraphQLRequest<String>(document: graphQLDocument, variables: {
+            'message': {'text': text, 'topic': 'uuid101'}
+          }))
+          .response;
+      safePrint('Send message data received: ${response.data}');
+    } on Exception catch (e) {
+      safePrint(e);
+    }
+  }
+
+  @override
+  void dispose() {
+    subscription?.cancel();
+    _streamController.close();
+    _controller.dispose();
+    super.dispose();
+  }
+}
+
+To automatically scroll the ListView to the bottom after receiving a new message, you can use a ScrollController. Here's the updated code with the necessary changes:
+
+    Add a ScrollController to _MyHomePageState:
+
+dart
+
+final ScrollController _scrollController = ScrollController();
+
+    Assign the _scrollController to the ListView.builder:
+
+dart
+
+return ListView.builder(
+  controller: _scrollController,
+  itemCount: snapshot.data!.length,
+  itemBuilder: (context, index) {
+    final message = snapshot.data![index];
+    return ListTile(
+      title: Text(message['text']),
+      subtitle: Text(message['topic']),
+    );
+  },
+);
+
+    Create a new function _scrollToBottom() to scroll the ListView to the bottom:
+
+dart
+
+void _scrollToBottom() {
+  _scrollController.animateTo(
+    _scrollController.position.maxScrollExtent,
+    duration: Duration(milliseconds: 300),
+    curve: Curves.easeInOut,
+  );
+}
+
+    Call the _scrollToBottom() function in the subscription listener, after updating the messages and stream:
+
+dart
+
+setState(() {
+  _messages.add(json.decode(event.data!)['onSendMessage']);
+  _streamController.add(_messages);
+  _scrollToBottom();
+});
+
+With these changes, the ListView will automatically scroll to the bottom when a new message is received.
+
+Don't forget to dispose of the _scrollController in the dispose() method:
+
+dart
+
+@override
+void dispose() {
+  subscription?.cancel();
+  _streamController.close();
+  _controller.dispose();
+  _scrollController.dispose();
+  super.dispose();
+}
+
+pablo@varelacastelo.com
+I have added the provided code, but it is not scrolling
+
+I apologize for the inconvenience. It seems that the scroll animation is being called before the ListView has a chance to update its content. To fix this, you can use the SchedulerBinding.instance.addPostFrameCallback method to ensure the _scrollToBottom() function is called after the build process is complete.
+
+Here's the updated subscription listener code:
+
+dart
+
+setState(() {
+  _messages.add(json.decode(event.data!)['onSendMessage']);
+  _streamController.add(_messages);
+});
+
+SchedulerBinding.instance.addPostFrameCallback((_) {
+  _scrollToBottom();
+});
+
+Make sure to import the SchedulerBinding by adding the following import statement at the top of your file:
+
+dart
+
+import 'package:flutter/scheduler.dart';
+
+Now, the ListView should scroll to the bottom when a new message is received.
+pablo@varelacastelo.com
+I want to update the GraphQL schema so that there are users, and ai users, and each user can subscribe to its own messages and the messages from all ai users. How would you update it?
+
+To achieve the desired functionality, you can update your GraphQL schema as follows:
+
+graphql
+
+type User @model @auth(rules: [{ allow: owner }]) {
+  id: ID!
+  username: String!
+  messages: [Message] @connection(keyName: "byUser", fields: ["id"])
+}
+
+type AIUser @model {
+  id: ID!
+  username: String!
+  messages: [Message] @connection(keyName: "byAIUser", fields: ["id"])
+}
+
+type Message @model
+  @key(name: "byUser", fields: ["userId"])
+  @key(name: "byAIUser", fields: ["aiUserId"]) {
+  id: ID!
+  text: String!
+  userId: ID
+  user: User @connection(fields: ["userId"])
+  aiUserId: ID
+  aiUser: AIUser @connection(fields: ["aiUserId"])
+  createdAt: AWSDateTime!
+}
+
+This schema defines a User type, an AIUser type, and a Message type. Each User and AIUser can have multiple messages, and each message can be associated with either a User or an AIUser.
+
+Now, users can subscribe to their own messages and the messages from all AI users by updating the subscription query like this:
+
+graphql
+
+subscription OnUserOrAIMessage($userId: ID!) {
+  or: [
+    { field: "userId", equals: $userId },
+    { field: "aiUserId", exists: true }
+  ]
+  onCreateMessage {
+    id
+    text
+    userId
+    aiUserId
+    createdAt
+  }
+}
+
+To use this updated subscription in your Flutter code, you will need to update the _subscribeToNewMessages() function as follows:
+
+dart
+
+Future<void> _subscribeToNewMessages() async {
+  String graphQLDocument = '''
+    subscription OnUserOrAIMessage(\$userId: ID!) {
+      or: [
+        { field: "userId", equals: \$userId },
+        { field: "aiUserId", exists: true }
+      ]
+      onCreateMessage {
+        id
+        text
+        userId
+        aiUserId
+        createdAt
+      }
+    }
+  ''';
+
+  try {
+    // Get the current user's ID
+    final user = await Amplify.Auth.getCurrentUser();
+    final userId = user.userId;
+
+    final Stream<GraphQLResponse<dynamic>> operation = Amplify.API.subscribe(
+        GraphQLRequest<String>(
+          document: graphQLDocument,
+          variables: {'userId': userId},
+        ), onEstablished: () {
+      safePrint('Subscription established');
+    });
+    subscription = operation.listen(
+      (event) {
+        safePrint('Subscription event data received: ${event.data}');
+        setState(() {
+          _messages.add(json.decode(event.data!)['onCreateMessage']);
+          _streamController.add(_messages);
+        });
+
+        SchedulerBinding.instance.addPostFrameCallback((_) {
+          _scrollToBottom();
+        });
+      },
+      onError: (Object e) => safePrint('Error in subscription stream: $e'),
+    );
+  } on ApiException catch (e) {
+    print('Failed to establish subscription: $e');
+  }
+}
+
+This updated _subscribeToNewMessages() function will subscribe to the messages created by the current user and all AI users.
+pablo@varelacastelo.com
+I apologize for my mistake. I don't want AI users, I want only users but both user messages as responses and AI message responses. 
+
+Also, please don't use the @model, @connection and @key annotations as I will implement that on the backend. Please only use the @auth annotation.
+
+No problem! Based on your updated requirements, I have revised the GraphQL schema as follows:
+
+graphql
+
+type User @auth(rules: [{ allow: owner }]) {
+  id: ID!
+  username: String!
+  messages: [Message]
+}
+
+type Message {
+  id: ID!
+  text: String!
+  user: User
+  isAIResponse: Boolean!
+  createdAt: AWSDateTime!
+}
+
+In this schema, there is a User type and a Message type. Each User can have multiple messages, and each message can be associated with a User. The isAIResponse field is a boolean flag to indicate if the message is an AI response or not.
+
+To subscribe to both user messages and AI message responses, you can update the subscription query like this:
+
+graphql
+
+subscription OnUserOrAIResponseMessage($userId: ID!) {
+  or: [
+    { field: "user.id", equals: $userId },
+    { field: "isAIResponse", equals: true }
+  ]
+  onCreateMessage {
+    id
+    text
+    user {
+      id
+      username
+    }
+    isAIResponse
+    createdAt
+  }
+}
+
+To use this updated subscription in your Flutter code, you will need to update the _subscribeToNewMessages() function as follows:
+
+dart
+
+Future<void> _subscribeToNewMessages() async {
+  String graphQLDocument = '''
+    subscription OnUserOrAIResponseMessage(\$userId: ID!) {
+      or: [
+        { field: "user.id", equals: \$userId },
+        { field: "isAIResponse", equals: true }
+      ]
+      onCreateMessage {
+        id
+        text
+        user {
+          id
+          username
+        }
+        isAIResponse
+        createdAt
+      }
+    }
+  ''';
+
+  try {
+    // Get the current user's ID
+    final user = await Amplify.Auth.getCurrentUser();
+    final userId = user.userId;
+
+    final Stream<GraphQLResponse<dynamic>> operation = Amplify.API.subscribe(
+        GraphQLRequest<String>(
+          document: graphQLDocument,
+          variables: {'userId': userId},
+        ), onEstablished: () {
+      safePrint('Subscription established');
+    });
+    subscription = operation.listen(
+      (event) {
+        safePrint('Subscription event data received: ${event.data}');
+        setState(() {
+          _messages.add(json.decode(event.data!)['onCreateMessage']);
+          _streamController.add(_messages);
+        });
+
+        SchedulerBinding.instance.addPostFrameCallback((_) {
+          _scrollToBottom();
+        });
+      },
+      onError: (Object e) => safePrint('Error in subscription stream: $e'),
+    );
+  } on ApiException catch (e) {
+    print('Failed to establish subscription: $e');
+  }
+}
+
+This updated _subscribeToNewMessages() function will subscribe to the messages created by the current user and all AI responses.
+pablo@varelacastelo.com
+Make it so that each AI response is associated to the user who sent the message which responding to, such that each user can only query its own messages and the messages that each user's AI responds.
+
+To associate AI responses with the user who sent the message and to allow users to query only their messages and the messages that their AI responds, you can update the GraphQL schema as follows:
+
+graphql
+
+type User @auth(rules: [{ allow: owner }]) {
+  id: ID!
+  username: String!
+  messages: [Message]
+  aiResponses: [Message]
+}
+
+type Message {
+  id: ID!
+  text: String!
+  user: User
+  aiResponseTo: User
+  createdAt: AWSDateTime!
+}
+
+In this schema, each User can have multiple messages and multiple AI responses. The Message type now has an additional aiResponseTo field to associate an AI response to the user who sent the message.
+
+To get a user's messages and the AI responses to their messages, you can use the following query:
+
+graphql
+
+query GetUserMessagesAndAIResponses($userId: ID!) {
+  getUser(id: $userId) {
+    id
+    username
+    messages {
+      items {
+        id
+        text
+        createdAt
+      }
+    }
+    aiResponses {
+      items {
+        id
+        text
+        createdAt
+      }
+    }
+  }
+}
+
+To use this updated query in your Flutter code, you will need to update the _receiveMessages() function as follows:
+
+dart
+
+Future<void> _receiveMessages() async {
+  String graphQLDocument = """
+    query GetUserMessagesAndAIResponses(\$userId: ID!) {
+      getUser(id: \$userId) {
+        id
+        username
+        messages {
+          items {
+            id
+            text
+            createdAt
+          }
+        }
+        aiResponses {
+          items {
+            id
+            text
+            createdAt
+          }
+        }
+      }
+    }
+  """;
+
+  try {
+    // Get the current user's ID
+    final user = await Amplify.Auth.getCurrentUser();
+    final userId = user.userId;
+
+    final response = await Amplify.API.query(
+        request: GraphQLRequest<String>(
+            document: graphQLDocument, variables: {'userId': userId}));
+
+    print('Query messages data received: ${response.data}');
+    setState(() {
+      final userData = json.decode(response.data!)['getUser'];
+      _messages = userData['messages']['items'] +
+          userData['aiResponses']['items'];
+      _messages.sort((a, b) => a['createdAt'].compareTo(b['createdAt']));
+      _streamController.add(_messages);
+    });
+  } on Exception catch (e) {
+    print(e);
+  }
+}
+
+This updated _receiveMessages() function will fetch both the user's messages and the AI responses to their messages. Make sure to adjust your backend implementation to account for the updated schema and query.
+pablo@varelacastelo.com
+Make it so each user can query the responses generated by the other users AIs, but not the messages sent by the users themselves.
+
+To allow users to query the AI responses generated by other users, but not the messages sent by the users themselves, you can update the schema as follows:
+
+graphql
+
+type User @auth(rules: [{ allow: owner }]) {
+  id: ID!
+  username: String!
+  messages: [Message]
+  aiResponses: [Message]
+}
+
+type Message @auth(rules: [{ allow: private, operations: [read] }]) {
+  id: ID!
+  text: String!
+  user: User
+  aiResponseTo: User
+  createdAt: AWSDateTime!
+}
+
+In this schema, I've added the @auth directive to the Message type to allow private read access to messages. This will allow all users to read the AI responses but not the original messages sent by the users.
+
+Now, you can use the following query to get all the AI responses:
+
+graphql
+
+query GetAIResponses {
+  listMessages(filter: { aiResponseTo: { ne: null } }) {
+    items {
+      id
+      text
+      aiResponseTo {
+        id
+        username
+      }
+      createdAt
+    }
+  }
+}
+
+Update the _receiveMessages() function in your Flutter code to use this new query:
+
+dart
+
+Future<void> _receiveMessages() async {
+  String graphQLDocument = """
+    query GetAIResponses {
+      listMessages(filter: { aiResponseTo: { ne: null } }) {
+        items {
+          id
+          text
+          aiResponseTo {
+            id
+            username
+          }
+          createdAt
+        }
+      }
+    }
+  """;
+
+  try {
+    final response = await Amplify.API.query(
+        request: GraphQLRequest<String>(document: graphQLDocument));
+
+    print('Query AI responses data received: ${response.data}');
+    setState(() {
+      _messages = json.decode(response.data!)['listMessages']['items'];
+      _streamController.add(_messages);
+    });
+  } on Exception catch (e) {
+    print(e);
+  }
+}
+
+This updated _receiveMessages() function will fetch all the AI responses generated by other users' AIs. Make sure to adjust your backend implementation to account for the updated schema and query.
+pablo@varelacastelo.com
+Based on your feedback I've come up with the following schema. Please modify it so that the onSendMessage subscription filters by cognitoId, and after that update the code accordingly to the schema changes:
+
+type Query {
+  messages: [Message!]!
+}
+
+union Message = UserMessage | AiResponse
+
+type User {
+	cognitoId: ID!
+	username: String!
+}
+
+type UserMessage @auth(rules: [{ allow: [{ allow: private, operations: [create, read] }] }]) {
+  user: User
+  text: String!
+}
+
+type AiResponse {
+  user: User!
+  text: String!
+}
+
+input SendMessageInput {
+  text: String!
+}
+
+type Mutation {
+  sendMessage(message: SendMessageInput!): UserMessage!
+}
+
+type Subscription {
+  onSendMessage(): UserMessage @aws_subscribe(mutations: ["sendMessage"])
+  onAiResponse(): AiResponse @aws_subscribe(mutations: ["sendMessage"])
+}
+
+schema {
+  query: Query
+  mutation: Mutation
+  subscription: Subscription
+}
+
+Your schema looks good. To filter the onSendMessage subscription by cognitoId, you can update the Subscription type as follows:
+
+graphql
+
+type Subscription {
+  onSendMessage(cognitoId: ID!): UserMessage @aws_subscribe(mutations: ["sendMessage"])
+  onAiResponse(): AiResponse @aws_subscribe(mutations: ["sendMessage"])
+}
+
+Now, update the _subscribeToNewMessages function in your Flutter code to include the cognitoId:
+
+dart
+
+Future<void> _subscribeToNewMessages() async {
+  String graphQLDocument = '''
+    subscription OnSendMessage(\$cognitoId: ID!) {
+      onSendMessage(cognitoId: \$cognitoId) {
+        user {
+          cognitoId
+          username
+        }
+        text
+      }
+    }
+  ''';
+
+  // Get the user's cognitoId
+  final AuthUser? currentUser = await Amplify.Auth.getCurrentUser();
+  final String? cognitoId = currentUser?.userId;
+
+  try {
+    final Stream<GraphQLResponse<dynamic>> operation = Amplify.API.subscribe(
+      GraphQLRequest<String>(
+        document: graphQLDocument,
+        variables: {'cognitoId': cognitoId},
+      ),
+      onEstablished: () {
+        safePrint('Subscription established');
+      },
+    );
+    subscription = operation.listen(
+      (event) {
+        safePrint('Subscription event data received: ${event.data}');
+        setState(() {
+          _messages.add(json.decode(event.data!)['onSendMessage']);
+          _streamController.add(_messages);
+        });
+      },
+      onError: (Object e) => safePrint('Error in subscription stream: $e'),
+    );
+  } on ApiException catch (e) {
+    print('Failed to establish subscription: $e');
+  }
+}
+
+This updated _subscribeToNewMessages function will include the user's cognitoId in the subscription variables. Make sure to adjust your backend implementation to account for the updated schema and subscription.
+pablo@varelacastelo.com
+Update the main.dart file so that the client is not only subscribed to UserMessage(s) but also to AiResponse(s)
+
+To subscribe to both UserMessage and AiResponse, you can modify the _subscribeToNewMessages function in your Flutter code. Create another subscription for AiResponse and include it in the function:
+
+dart
+
+Future<void> _subscribeToNewMessages() async {
+  String onSendMessageDocument = '''
+    subscription OnSendMessage(\$cognitoId: ID!) {
+      onSendMessage(cognitoId: \$cognitoId) {
+        user {
+          cognitoId
+          username
+        }
+        text
+      }
+    }
+  ''';
+
+  String onAiResponseDocument = '''
+    subscription OnAiResponse {
+      onAiResponse {
+        user {
+          cognitoId
+          username
+        }
+        text
+      }
+    }
+  ''';
+
+  // Get the user's cognitoId
+  final AuthUser? currentUser = await Amplify.Auth.getCurrentUser();
+  final String? cognitoId = currentUser?.userId;
+
+  try {
+    // Subscription for UserMessage
+    final Stream<GraphQLResponse<dynamic>> userMessageOperation = Amplify.API.subscribe(
+      GraphQLRequest<String>(
+        document: onSendMessageDocument,
+        variables: {'cognitoId': cognitoId},
+      ),
+      onEstablished: () {
+        safePrint('UserMessage subscription established');
+      },
+    );
+
+    // Subscription for AiResponse
+    final Stream<GraphQLResponse<dynamic>> aiResponseOperation = Amplify.API.subscribe(
+      GraphQLRequest<String>(
+        document: onAiResponseDocument,
+      ),
+      onEstablished: () {
+        safePrint('AiResponse subscription established');
+      },
+    );
+
+    // Listen for UserMessage events
+    subscription = userMessageOperation.listen(
+      (event) {
+        safePrint('UserMessage event data received: ${event.data}');
+        setState(() {
+          _messages.add(json.decode(event.data!)['onSendMessage']);
+          _streamController.add(_messages);
+        });
+      },
+      onError: (Object e) => safePrint('Error in UserMessage subscription stream: $e'),
+    );
+
+    // Listen for AiResponse events
+    subscription = aiResponseOperation.listen(
+      (event) {
+        safePrint('AiResponse event data received: ${event.data}');
+        setState(() {
+          _messages.add(json.decode(event.data!)['onAiResponse']);
+          _streamController.add(_messages);
+        });
+      },
+      onError: (Object e) => safePrint('Error in AiResponse subscription stream: $e'),
+    );
+  } on ApiException catch (e) {
+    print('Failed to establish subscription: $e');
+  }
+}
+
+Now, the _subscribeToNewMessages function will handle both UserMessage and AiResponse subscriptions. Make sure your backend implementation can handle these subscriptions and send the appropriate messages.
+pablo@varelacastelo.com
+I tried to update the server to the following GraphQL schema, but it says that is not a valid SDL formatted document. Please fix it:
+
+type Query {
+  messages: [Message!]!
+}
+
+union Message = UserMessage | AiResponse
+
+type User {
+	cognitoId: ID!
+	username: String!
+}
+
+type UserMessage @auth(rules: [{ allow: [{ allow: private, operations: [create, read] }] }]) {
+  user: User!
+  text: String!
+}
+
+type AiResponse {
+  user: User!
+  text: String!
+}
+
+input SendMessageInput {
+  text: String!
+}
+
+type Mutation {
+  sendMessage(message: SendMessageInput!): UserMessage!
+}
+
+type Subscription {
+  onSendMessage(): UserMessage @aws_subscribe(mutations: ["sendMessage"])
+  onAiResponse(cognitoId: ID!): AiResponse @aws_subscribe(mutations: ["sendMessage"])
+}
+
+schema {
+  query: Query
+  mutation: Mutation
+  subscription: Subscription
+}
+
+The issue is with the @auth directive syntax in the UserMessage type. You have an extra set of curly braces inside the allow array. Here is the corrected schema:
+
+graphql
+
+type Query {
+  messages: [Message!]!
+}
+
+union Message = UserMessage | AiResponse
+
+type User {
+  cognitoId: ID!
+  username: String!
+}
+
+type UserMessage @auth(rules: [{ allow: private, operations: [create, read] }]) {
+  user: User!
+  text: String!
+}
+
+type AiResponse {
+  user: User!
+  text: String!
+}
+
+input SendMessageInput {
+  text: String!
+}
+
+type Mutation {
+  sendMessage(message: SendMessageInput!): UserMessage!
+}
+
+type Subscription {
+  onSendMessage(): UserMessage @aws_subscribe(mutations: ["sendMessage"])
+  onAiResponse(cognitoId: ID!): AiResponse @aws_subscribe(mutations: ["sendMessage"])
+}
+
+schema {
+  query: Query
+  mutation: Mutation
+  subscription: Subscription
+}
+
+Now the schema should be a valid SDL formatted document.
+pablo@varelacastelo.com
+I have updated it but the problem remains
+
+Apologies for the confusion. The problem is with the @auth directive in the schema. The AWS Amplify @auth directive should be applied to the object type, not a field inside the object type. However, in this case, it seems like you don't need the @auth directive as you're handling the authorization in your backend. Here's the updated schema:
+
+graphql
+
+type Query {
+  messages: [Message!]!
+}
+
+union Message = UserMessage | AiResponse
+
+type User {
+  cognitoId: ID!
+  username: String!
+}
+
+type UserMessage {
+  user: User!
+  text: String!
+}
+
+type AiResponse {
+  user: User!
+  text: String!
+}
+
+input SendMessageInput {
+  text: String!
+}
+
+type Mutation {
+  sendMessage(message: SendMessageInput!): UserMessage!
+}
+
+type Subscription {
+  onSendMessage(): UserMessage @aws_subscribe(mutations: ["sendMessage"])
+  onAiResponse(cognitoId: ID!): AiResponse @aws_subscribe(mutations: ["sendMessage"])
+}
+
+schema {
+  query: Query
+  mutation: Mutation
+  subscription: Subscription
+}
+
+This schema should be a valid SDL formatted document. If you still encounter issues, please let me know.
+pablo@varelacastelo.com
+Well, I do want to want the GraphQL schema to specify the auth rules. So, Can you readd the @auth annonation or something else that specifies that the UserMessage(s) are private to the user?
+
+I apologize for the confusion. Here's the updated schema using the @auth directive for the UserMessage type to make sure only the owner of the message can read or create them:
+
+graphql
+
+type Query {
+  messages: [Message!]!
+}
+
+union Message = UserMessage | AiResponse
+
+type User {
+  cognitoId: ID!
+  username: String!
+}
+
+type UserMessage @auth(rules: [{ allow: owner, ownerField: "user.cognitoId", operations: [create, read] }]) {
+  user: User!
+  text: String!
+}
+
+type AiResponse {
+  user: User!
+  text: String!
+}
+
+input SendMessageInput {
+  text: String!
+}
+
+type Mutation {
+  sendMessage(message: SendMessageInput!): UserMessage!
+}
+
+type Subscription {
+  onSendMessage(): UserMessage @aws_subscribe(mutations: ["sendMessage"])
+  onAiResponse(cognitoId: ID!): AiResponse @aws_subscribe(mutations: ["sendMessage"])
+}
+
+schema {
+  query: Query
+  mutation: Mutation
+  subscription: Subscription
+}
+
+The @auth directive is applied to the UserMessage type, with the allow: owner rule. The ownerField is set to "user.cognitoId" to make sure that only the owner (the user with the matching Cognito ID) can create or read their own messages.
+pablo@varelacastelo.com
+I have updated the schema to the following, but it says that the subscription has an invalid output type. Please fix it while keeping the functionality:
+
+type Query {
+  messages: [Message!]!
+}
+
+union Message = UserMessage | AiResponse
+
+type User {
+	cognitoId: ID!
+	username: String!
+}
+
+type UserMessage {
+  user: User!
+  text: String!
+}
+
+type AiResponse {
+  user: User!
+  text: String!
+}
+
+input SendMessageInput {
+  text: String!
+}
+
+type Mutation {
+  sendMessage(message: SendMessageInput!): Message!
+}
+
+type Subscription {
+  onSendMessage: UserMessage @aws_subscribe(mutations: ["sendMessage"])
+  onAiResponse(cognitoId: ID!): AiResponse @aws_subscribe(mutations: ["sendMessage"])
+}
+
+schema {
+  query: Query
+  mutation: Mutation
+  subscription: Subscription
+}
+
+I apologize for the confusion. It seems like the error is related to the union type Message being used as the output type for the sendMessage mutation. Unfortunately, GraphQL doesn't allow union types to be used as output types for mutations or subscriptions. To address this issue, you can separate the sendMessage mutation into two separate mutations: sendUserMessage and sendAiResponse. Here's the updated schema:
+
+graphql
+
+type Query {
+  messages: [Message!]!
+}
+
+union Message = UserMessage | AiResponse
+
+type User {
+  cognitoId: ID!
+  username: String!
+}
+
+type UserMessage {
+  user: User!
+  text: String!
+}
+
+type AiResponse {
+  user: User!
+  text: String!
+}
+
+input SendUserMessageInput {
+  text: String!
+}
+
+input SendAiResponseInput {
+  text: String!
+}
+
+type Mutation {
+  sendUserMessage(message: SendUserMessageInput!): UserMessage!
+  sendAiResponse(message: SendAiResponseInput!): AiResponse!
+}
+
+type Subscription {
+  onUserMessage: UserMessage @aws_subscribe(mutations: ["sendUserMessage"])
+  onAiResponse(cognitoId: ID!): AiResponse @aws_subscribe(mutations: ["sendAiResponse"])
+}
+
+schema {
+  query: Query
+  mutation: Mutation
+  subscription: Subscription
+}
+
+Now, there are two separate mutations (sendUserMessage and sendAiResponse) and two separate subscriptions (onUserMessage and onAiResponse). This should fix the issue with the invalid output type.
+pablo@varelacastelo.com
+I have updated the schema to the following, which is deployed correctly when I remove the @auth annonation.  When I leave the @auth annonation, it returns "Internal failure while saving the schema".
+Could this be related to using Cognito User Pool authorization? Please fix it:
+
+type Query {
+  messages: [Message!]!
+}
+
+union Message = UserMessage | AiResponse
+
+type User {
+	cognitoId: ID!
+	username: String!
+}
+
+type UserMessage @auth(rules: [{ allow: owner, ownerField: "user.cognitoId", operations: [create, read] }]) {
+  user: User!
+  text: String!
+}
+
+type AiResponse {
+  user: User!
+  text: String!
+}
+
+input SendMessageInput {
+  text: String!
+}
+
+type Mutation {
+  sendMessage(message: SendMessageInput!): UserMessage!
+  requestAiResponse(message: SendMessageInput!): AiResponse!
+}
+
+type Subscription {
+  onSendMessage: UserMessage @aws_subscribe(mutations: ["sendMessage"])
+  onRequestAiResponse(cognitoId: ID!): AiResponse @aws_subscribe(mutations: ["requestAiResponse"])
+}
+
+schema {
+  query: Query
+  mutation: Mutation
+  subscription: Subscription
+}
+
+I apologize for the confusion. The issue with the @auth directive in the provided schema is that it uses the owner strategy, which requires an owner field in the type. In your schema, the owner field is nested inside the User type, which is not supported. To fix this issue, you can add a separate owner field to the UserMessage type and update the @auth directive accordingly.
+
+Here's the updated schema:
+
+graphql
+
+type Query {
+  messages: [Message!]!
+}
+
+union Message = UserMessage | AiResponse
+
+type User {
+  cognitoId: ID!
+  username: String!
+}
+
+type UserMessage @auth(rules: [{ allow: owner, ownerField: "owner", operations: [create, read] }]) {
+  owner: ID!
+  user: User!
+  text: String!
+}
+
+type AiResponse {
+  user: User!
+  text: String!
+}
+
+input SendMessageInput {
+  text: String!
+}
+
+type Mutation {
+  sendMessage(message: SendMessageInput!): UserMessage!
+  requestAiResponse(message: SendMessageInput!): AiResponse!
+}
+
+type Subscription {
+  onSendMessage: UserMessage @aws_subscribe(mutations: ["sendMessage"])
+  onRequestAiResponse(cognitoId: ID!): AiResponse @aws_subscribe(mutations: ["requestAiResponse"])
+}
+
+schema {
+  query: Query
+  mutation: Mutation
+  subscription: Subscription
+}
+
+Now, the UserMessage type has an owner field that stores the Cognito User Pool user ID. The @auth directive has been updated to use the owner field for access control. This should resolve the issue with the schema.
+pablo@varelacastelo.com
+I now have the following GraphQL schema, but it returns "Validation error of type FieldUndefined: Field 'text' in type 'Message' is undefined @ 'messages/text'" after doing a query. Please fix it:
+
+type Query {
+  messages: [Message!]!
+}
+
+union Message = UserMessage | AiResponse
+
+type User {
+	cognitoId: ID!
+	username: String!
+}
+
+type UserMessage {
+  user: User!
+  text: String!
+}
+
+type AiResponse {
+  user: User!
+  text: String!
+}
+
+input SendMessageInput {
+  text: String!
+}
+
+type Mutation {
+  sendMessage(message: SendMessageInput!): UserMessage!
+  requestAiResponse(message: SendMessageInput!): AiResponse!
+}
+
+type Subscription {
+  onSendMessage: UserMessage @aws_subscribe(mutations: ["sendMessage"])
+  onRequestAiResponse(cognitoId: ID!): AiResponse @aws_subscribe(mutations: ["requestAiResponse"])
+}
+
+schema {
+  query: Query
+  mutation: Mutation
+  subscription: Subscription
+}
+
+The error you're encountering is due to the fact that when using a union type in a query, you need to specify which fields you want to retrieve for each type included in the union. In your case, the Message union includes both UserMessage and AiResponse types.
+
+To fix this issue, you need to update your query to use inline fragments to specify the fields for each type within the union. Here's an example of how you can write a query for your current schema:
+
+graphql
+
+query GetMessages {
+  messages {
+    ... on UserMessage {
+      user {
+        cognitoId
+        username
+      }
+      text
+    }
+    ... on AiResponse {
+      user {
+        cognitoId
+        username
+      }
+      text
+    }
+  }
+}
+
+In this query, the ... on UserMessage and ... on AiResponse inline fragments specify the fields you want to retrieve for each type included in the Message union. This should resolve the validation error you encountered.
+pablo@varelacastelo.com
+I have updated the code but it returns:
+
+Subscription event data received: null
+Unhandled exception: Null check operator used on a null value
+
+Please fix it:
+
+import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
+import 'dart:convert';
+import 'dart:async';
+
+import 'package:amplify_flutter/amplify_flutter.dart';
+import 'package:amplify_api/amplify_api.dart';
+import 'package:amplify_auth_cognito/amplify_auth_cognito.dart';
+import 'package:amplify_authenticator/amplify_authenticator.dart';
+import 'auth_config.dart';
+
+void main() => runApp(const MyApp());
+
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    const title = 'WebSocket Demo';
+    return const MaterialApp(
+      title: title,
+      home: MyHomePage(
+        title: title,
+      ),
+    );
+  }
+}
+
+class MyHomePage extends StatefulWidget {
+  const MyHomePage({
+    super.key,
+    required this.title,
+  });
+
+  final String title;
+
+  @override
+  State<MyHomePage> createState() => _MyHomePageState();
+}
+
+class _MyHomePageState extends State<MyHomePage> {
+  final TextEditingController _controller = TextEditingController();
+  List<dynamic> _messages = [];
+  final StreamController<List<dynamic>> _streamController =
+      StreamController<List<dynamic>>.broadcast();
+  StreamSubscription<GraphQLResponse<dynamic>>? subscription;
+  final ScrollController _scrollController = ScrollController();
+  @override
+  void initState() {
+    super.initState();
+    _configureAmplify();
+  }
+
+  Future<void> _configureAmplify() async {
+    await Amplify.addPlugin(AmplifyAuthCognito());
+    await Amplify.addPlugin(AmplifyAPI());
+    final amplifyconfig = await amplifyConfig();
+    try {
+      await Amplify.configure(amplifyconfig);
+      safePrint('Successfully configured Amplify');
+    } on Exception catch (e) {
+      safePrint('Error configuring Amplify: $e');
+    }
+    _receiveMessages();
+    _subscribeToNewMessages();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Authenticator(
+      child: MaterialApp(
+        builder: Authenticator.builder(),
+        home: Scaffold(
+          appBar: AppBar(
+            title: Text(widget.title),
+          ),
+          body: Padding(
+            padding: const EdgeInsets.all(20.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Form(
+                  child: TextFormField(
+                    controller: _controller,
+                    decoration:
+                        const InputDecoration(labelText: 'Send a message'),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Expanded(
+                  child: StreamBuilder<List<dynamic>>(
+                    stream: _streamController.stream,
+                    initialData: _messages,
+                    builder: (context, snapshot) {
+                      if (snapshot.hasData) {
+                        return ListView.builder(
+                          controller: _scrollController,
+                          itemCount: snapshot.data!.length,
+                          itemBuilder: (context, index) {
+                            final message = snapshot.data![index];
+                            return ListTile(
+                              title: Text(message['text']),
+                              subtitle: Text(message['topic']),
+                            );
+                          },
+                        );
+                      } else {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+          floatingActionButton: FloatingActionButton(
+            onPressed: () async {
+              if (_controller.text.isNotEmpty) {
+                await _sendMessage(text: _controller.text);
+              }
+            },
+            tooltip: 'Send message',
+            child: const Icon(Icons.send),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _receiveMessages() async {
+    String graphQLDocument = """
+    query GetMessages {
+      messages {
+        ... on UserMessage {
+          user {
+            cognitoId
+            username
+          }
+          text
+        }
+        ... on AiResponse {
+          user {
+            cognitoId
+            username
+            }
+          text
+        }
+      } 
+    }
+    """;
+    try {
+      final response = await Amplify.API
+          .query(request: GraphQLRequest<String>(document: graphQLDocument))
+          .response;
+      print('Query messages data received: ${response.data}');
+      print('Query messages error received: ${response.errors}');
+      setState(() {
+        _messages = json.decode(response.data!)['messages'];
+        _streamController.add(_messages);
+      });
+      SchedulerBinding.instance.addPostFrameCallback((_) {
+        _scrollToBottom();
+      });
+    } on Exception catch (e) {
+      print(e);
+    }
+  }
+
+  // subscription OnSendMessage(\$topic: ID) {
+  //   onSendMessage(topic: \$topic) {
+  Future<void> _subscribeToNewMessages() async {
+    String graphQLDocument = '''
+    subscription OnSendMessage(\$cognitoId: ID!) {
+      onSendMessage(cognitoId: \$cognitoId) {
+        user {
+          cognitoId
+          username
+        }
+        text
+      }
+    }
+    ''';
+
+    // Get the user's cognitoId
+    final AuthUser currentUser = await Amplify.Auth.getCurrentUser();
+    final String cognitoId = currentUser.userId;
+
+    try {
+      final Stream<GraphQLResponse<dynamic>> operation = Amplify.API.subscribe(
+          GraphQLRequest<String>(
+            document: graphQLDocument,
+            variables: {'cognitoId': cognitoId},
+          ), onEstablished: () {
+        safePrint('Subscription established');
+      });
+      subscription = operation.listen(
+        (event) {
+          safePrint('Subscription event data received: ${event.data}');
+          setState(() {
+            _messages.add(json.decode(event.data!)['onSendMessage']);
+            _streamController.add(_messages);
+          });
+          SchedulerBinding.instance.addPostFrameCallback((_) {
+            _scrollToBottom();
+          });
+        },
+        onError: (Object e) => safePrint('Error in subscription stream: $e'),
+      );
+    } on ApiException catch (e) {
+      print('Failed to establish subscription: $e');
+    }
+  }
+
+  Future<void> _sendMessage({required String text}) async {
+    String graphQLDocument = '''
+    mutation SendMessage(\$message: SendMessageInput!) {
+              sendMessage(message: \$message) {
+                text
+              }
+        }
+    ''';
+    try {
+      final response = await Amplify.API
+          .mutate(
+              request:
+                  GraphQLRequest<String>(document: graphQLDocument, variables: {
+            'message': {'text': text}
+          }))
+          .response;
+      safePrint('Send message data received: ${response.data}');
+      safePrint('Send message data error: ${response.data}');
+    } on Exception catch (e) {
+      safePrint(e);
+    }
+  }
+
+  void _scrollToBottom() {
+    _scrollController.animateTo(
+      _scrollController.position.maxScrollExtent,
+      duration: Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
+    );
+  }
+
+  @override
+  void dispose() {
+    subscription?.cancel();
+    _streamController.close();
+    _controller.dispose();
+    _scrollController.dispose();
+    super.dispose();
+  }
+}
+
+It seems like the error is caused because the event data received is null. To handle this issue, we can add a null check before updating the state.
+
+Please update the _subscribeToNewMessages function by adding a null check for event.data like this:
+
+dart
+
+subscription = operation.listen(
+  (event) {
+    if (event.data != null) {
+      safePrint('Subscription event data received: ${event.data}');
+      setState(() {
+        _messages.add(json.decode(event.data!)['onSendMessage']);
+        _streamController.add(_messages);
+      });
+      SchedulerBinding.instance.addPostFrameCallback((_) {
+        _scrollToBottom();
+      });
+    } else {
+      safePrint('Subscription event data received: null');
+    }
+  },
+  onError: (Object e) => safePrint('Error in subscription stream: $e'),
+);
+
+This should resolve the "Unhandled exception: Null check operator used on a null value" error you encountered.
+
+pablo@varelacastelo.com
+I have updated the schema and the code, and now it mostly works, but ...
