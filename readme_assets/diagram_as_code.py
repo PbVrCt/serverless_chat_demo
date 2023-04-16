@@ -27,7 +27,7 @@ with Diagram("", show=False, filename="diagram_as_code", graph_attr=graph_attr):
     lambda2 = Lambda("Delete messages", **node_attrs)
     lambda3 = Lambda("Post message", **node_attrs)
     db = Dynamodb("Messages Table", **node_attrs)
-    openai = Custom("OpenAI Api", "./openai_logo.png", **node_attrs)
+    openai = Custom("Chat completion", "./openai_logo.png", **node_attrs)
     api_key = SecretsManager("Api Key", **node_attrs)
 
     # Invisible alighment
