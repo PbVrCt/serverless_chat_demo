@@ -9,7 +9,7 @@ from botocore.exceptions import ClientError
 from aws_lambda_powertools import Logger, Metrics, Tracer
 from aws_lambda_powertools.logging import correlation_paths
 from aws_lambda_powertools.metrics import MetricUnit
-import openai
+from openai import ChatCompletion
 
 metrics = Metrics(service="websocket_chat", namespace="serverless_demo")
 tracer = Tracer(service="websocket_chat")
@@ -95,7 +95,7 @@ def handler(event, context):
     chat_inputs.extend(user_message)
     openai.api_key = secret
     try:
-        ai_response = openai.ChatCompletion.create(
+        ai_response = ChatCompletion.create(
             model="gpt-3.5-turbo",
             messages=chat_inputs,
             max_tokens=25,
